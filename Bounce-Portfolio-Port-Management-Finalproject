@@ -1,0 +1,209 @@
+# Markowitz-Model-Comparison
+MArkowitz model of a personal portfolio with stocks chosen by a fundamental analysis from the S&amp;P500 sector of Consumer Discretionary benchmarked against the ETF Invesco Consumer Discretionary ETF 
+# In[1]:
+
+
+"""
+Created on Sun Jan 31 17:11:35 2021
+
+@author: victor-flores
+"""
+
+
+import pandas as pd   
+import numpy as np    
+import matplotlib.pyplot as plt   
+from pandas_datareader import data, wb
+import datetime
+import random
+from random import choice                   
+import seaborn as sns                                 
+import datetime as dt                
+
+
+
+
+stocks = ['MCD','BKNG','LVS','GRMN','RCL','MGM','AZO','DPZ','HLT','HAS','NKE','ETSY','LEG','TJX','APTV','GPS','PVH','CMG','EXPE','BBY','IEFA','KBWB','VNQ','ICLN']
+startdate = '2017-1-31'              
+enddate = '2021-1-31' 
+
+stock_prices = data.DataReader(name=stocks, data_source='yahoo', start=startdate, end=enddate)
+adj_close = stock_prices['Adj Close']
+
+adj_close.head()
+
+
+#Calculate returns
+
+returns = adj_close.pct_change().dropna()
+
+#print(returns)
+
+
+#Calculate mu sigma
+mu = returns.mean()
+#print(mu)
+
+sigma = returns.std()
+#print(sigma)
+
+
+#Plot compounded returns or wealth index
+
+cummulative_returns = 100*(returns + 1).cumprod()
+
+
+#Now let's plot them
+cummulative_returns.plot(figsize=(10,5))
+plt.show()
+
+
+# In[17]:
+
+
+# Sharpe Ratio
+
+sharpe_ratio = mu / sigma
+
+weights = pd.Series(index = stocks, dtype = float)
+weights[stocks] = sharpe_ratio
+
+weights
+
+
+# In[11]:
+
+
+# Sortino Ratio
+
+downside_returns = cummulative_returns[cummulative_returns < 100]
+
+down_stdev = downside_returns.std()
+
+expected_return = cummulative_returns.mean()
+
+sortino_ratio = expected_return / down_stdev
+
+sortino_ratio
+
+
+# In[18]:
+
+
+max_sharpe = sharpe_ratio.max()
+max_location = sharpe_ratio.argmax()
+
+print(max_sharpe)
+print(max_location)
+
+
+# In[19]:
+
+
+max_return = mu[23]
+max_volatility = sigma[23]
+
+print(max_return)
+print(max_volatility)
+
+
+# In[20]:
+
+
+plt.figure(figsize=(12,8))
+plt.scatter(sigma, mu, c=weights, cmap='viridis')
+plt.colorbar(label='Sharpe Ratio')
+plt.xlabel('Volatility')
+plt.ylabel('Return')
+plt.scatter(max_volatility, max_return,c='red', s=50) # red dot
+plt.show()
+
+
+# In[21]:
+
+
+# Need some weights for where we have our money
+weights = pd.Series(index = stocks, dtype = float)   
+weights[stocks] = [0.0323,0.1204,0,0.0201,0,0,0.1448,0,0,0,0,0,0,0,0,0.0531,0,0,0.0160,0.5143,0,0,0,0.0989]                  # specific weights per ticker
+#weights[stocks]=1/len(stocks)  #equal weights per stock
+
+print(weights)
+
+
+# Initialize Monte Carlo parameters
+monte_carlo_runs = 100
+days_to_simulate = 5
+loss_cutoff      = 0.95           
+
+
+# Parametric
+
+compound_returns  = sigma.copy()
+total_simulations = 1000
+bad_simulations   = 10
+
+for run_counter in range(0,monte_carlo_runs):      
+    for i in stocks:                          
+        
+        # Loop over simulated days:
+        compounded_temp = 1
+        
+        for simulated_day_counter in range(0,days_to_simulate): # loop over days
+            
+            # Draw from 𝑁~(𝜇,𝜎)
+            ######################################################
+            simulated_return = np.random.normal(mu[i],sigma[i],1)
+            ######################################################
+            
+            compounded_temp = compounded_temp * (simulated_return + 1)        
+        
+        compound_returns[i] = compounded_temp     # store compounded returns
+    
+    # Now see if those returns are bad by combining with weights
+    portfolio_return = compound_returns.dot(weights) # dot product
+    
+    if(portfolio_return < loss_cutoff):
+        bad_simulations = bad_simulations + 1
+    
+    total_simulations = total_simulations + 1
+
+print("Your portfolio will lose", round((1-loss_cutoff)*100,3), "%",
+      "over", days_to_simulate, "days", 
+      bad_simulations/total_simulations, "of the time.")
+
+
+
+# Bootstrap
+
+compound_returns  = sigma.copy()
+total_simulations = 50
+bad_simulations   = 25
+
+for run_counter in range(0,monte_carlo_runs):   # Loop over runs    
+    for i in stocks:                           # loop over tickers, below is done once per ticker
+        
+        # Loop over simulated days:
+        compounded_temp = 1
+        
+        for simulated_day_counter in range(0,days_to_simulate): # loop over days
+            
+            # Draw from historical returns
+            ####################################
+            simulated_return = choice(returns[i])
+            ####################################
+            
+            compounded_temp = compounded_temp * (simulated_return + 1)        
+        
+        compound_returns[i] = compounded_temp     # store compounded returns
+    
+    # Now see if those returns are bad by combining with weights
+    portfolio_return = compound_returns.dot(weights) # dot product
+    
+    if(portfolio_return < loss_cutoff):
+        bad_simulations = bad_simulations + 1
+    
+    total_simulations = total_simulations + 1
+
+print("Your portfolio will lose", round((1-loss_cutoff)*100,3), "%",
+      "over", days_to_simulate, "days", 
+      bad_simulations/total_simulations, "of the time.")
